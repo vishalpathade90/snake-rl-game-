@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Snake RL — Q-Learning</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet"/>
+<style>
+:root{
+  --bg:#020408;--panel:#060d18;--border:#0a2a4a;
+  --ng:#00ff9d;--nb:#00cfff;--np:#c800ff;--nr:#ff2d55;--ny:#ffce00;
+  --text:#b8d4f0;--dim:#3a5a7a;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:'Share Tech Mono',monospace;
+  min-height:100vh;display:flex;flex-direction:column;align-items:center}
+body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:999;
+  background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,255,157,.015) 2px,rgba(0,255,157,.015) 4px)}
+
+/* header */
+header{width:100%;padding:18px 36px 14px;display:flex;align-items:center;
+  justify-content:space-between;border-bottom:1px solid var(--border);position:relative}
+header::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:1px;
+  background:linear-gradient(90deg,transparent,var(--ng),var(--nb),transparent)}
+.logo{font-family:'Orbitron',sans-serif;font-weight:900;font-size:1.5rem;letter-spacing:.1em;
+  background:linear-gradient(135deg,var(--ng),var(--nb));-webkit-background-clip:text;
+  -webkit-text-fill-color:transparent;filter:drop-shadow(0 0 10px rgba(0,255,157,.4))}
+.logo em{background:linear-gradient(135deg,var(--np),var(--nr));-webkit-background-clip:text;
+  -webkit-text-fill-color:transparent;font-style:normal}
+.hbadges{display:flex;gap:10px}
+.badge{font-size:.6rem;letter-spacing:.12em;padding:3px 9px;border-radius:2px;
+  border:1px solid var(--nb);color:var(--nb);text-transform:uppercase}
+
+/* layout */
+main{display:grid;grid-template-columns:200px 1fr 200px;gap:20px;
+  padding:24px 28px;width:100%;max-width:1060px}
+
+/* panels */
+.panel{background:var(--panel);border:1px solid var(--border);border-radius:4px;
+  padding:16px 14px;display:flex;flex-direction:column;gap:14px;position:relative}
+.panel::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;border-radius:4px 4px 0 0}
+.panel.g::before{background:linear-gradient(90deg,var(--ng),transparent)}
+.panel.b::before{background:linear-gradient(90deg,var(--nb),transparent)}
+
+.ptitle{font-family:'Orbitron',sans-serif;font-size:.55rem;letter-spacing:.2em;
+  text-transform:uppercase;color:var(--dim)}
+.stat{display:flex;flex-direction:column;gap:3px}
+.slabel{font-size:.55rem;letter-spacing:.13em;text-transform:uppercase;color:var(--dim)}
+.sval{font-family:'Orbitron',sans-serif;font-weight:700;line-height:1;font-size:1.5rem}
+.sval.sm{font-size:.9rem}
+.c-g{color:var(--ng);text-shadow:0 0 14px rgba(0,255,157,.5)}
+.c-b{color:var(--nb);text-shadow:0 0 14px rgba(0,207,255,.5)}
+.c-p{color:var(--np);text-shadow:0 0 14px rgba(200,0,255,.5)}
+.c-y{color:var(--ny);text-shadow:0 0 14px rgba(255,206,0,.5)}
+.c-r{color:var(--nr)}
+
+.barw{background:#0a1a2a;border-radius:2px;height:5px;overflow:hidden;margin-top:3px}
+.barf{height:100%;border-radius:2px;transition:width .4s ease}
+.barf.g{background:linear-gradient(90deg,var(--ng),#00ffcc)}
+.barf.p{background:linear-gradient(90deg,var(--np),#8800ff)}
+
+/* buttons */
+.btngrp{display:flex;flex-direction:column;gap:7px}
+button{font-family:'Orbitron',sans-serif;font-size:.58rem;letter-spacing:.1em;
+  text-transform:uppercase;padding:9px 12px;border-radius:3px;border:1px solid;
+  cursor:pointer;transition:all .15s;width:100%;background:transparent}
+button:hover{transform:translateY(-1px);filter:brightness(1.25)}
+button:active{transform:none}
+button:disabled{opacity:.35;cursor:not-allowed;transform:none}
+.btn-g{border-color:var(--ng);color:var(--ng)}
+.btn-b{border-color:var(--nb);color:var(--nb)}
+.btn-p{border-color:var(--np);color:var(--np)}
+.btn-y{border-color:var(--ny);color:var(--ny)}
+
+/* speed */
+.spwrap label{font-size:.55rem;letter-spacing:.11em;color:var(--dim);
+  text-transform:uppercase;display:flex;justify-content:space-between}
+input[type=range]{width:100%;margin-top:5px;accent-color:var(--nb);cursor:pointer}
+
+/* log */
+.log{font-size:.58rem;line-height:1.75;color:var(--dim);max-height:120px;overflow-y:auto}
+.log-e{color:var(--text)}.log-e.ok{color:var(--ng)}.log-e.warn{color:var(--ny)}
+
+/* legend */
+.legend{display:flex;flex-direction:column;gap:7px}
+.leg-i{display:flex;align-items:center;gap:7px;font-size:.6rem}
+.leg-d{width:10px;height:10px;border-radius:2px;flex-shrink:0}
+
+/* canvas area */
+.carea{display:flex;flex-direction:column;align-items:center;gap:10px}
+.cframe{position:relative;border:1px solid var(--border);border-radius:4px;
+  overflow:hidden;box-shadow:0 0 40px rgba(0,255,157,.04),inset 0 0 60px rgba(0,20,40,.7)}
+canvas#gc{display:block}
+.corner{position:absolute;width:14px;height:14px;border-color:var(--ng);border-style:solid;opacity:.55}
+.tl{top:0;left:0;border-width:2px 0 0 2px}
+.tr{top:0;right:0;border-width:2px 2px 0 0}
+.bl{bottom:0;left:0;border-width:0 0 2px 2px}
+.br{bottom:0;right:0;border-width:0 2px 2px 0}
+
+.sbar{font-size:.58rem;letter-spacing:.12em;color:var(--dim);text-transform:uppercase;
+  display:flex;align-items:center;gap:6px}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--ng)}
+.dot.idle{background:var(--dim)}
+.dot.fast{background:var(--ny);animation:pulse .7s infinite}
+.dot.watch{background:var(--ng);animation:pulse 1s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+/* chart */
+canvas#ch{width:100%;height:90px;display:block}
+
+/* training overlay */
+#tprog{background:rgba(2,4,8,.9);border:1px solid var(--ny);border-radius:4px;
+  padding:10px 14px;font-size:.62rem;color:var(--ny);display:none;text-align:center}
+#tprog.show{display:block}
+
+@media(max-width:800px){
+  main{grid-template-columns:1fr}
+  .carea{order:-1}
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">SNAKE <em>RL</em></div>
+  <div class="hbadges">
+    <div class="badge">Q-Learning</div>
+    <div class="badge">Live AI</div>
+  </div>
+</header>
+
+<main>
+<!-- LEFT -->
+<aside class="panel g">
+  <div class="ptitle">Agent</div>
+  <div class="stat">
+    <div class="slabel">Episode</div>
+    <div class="sval c-b" id="ep">0</div>
+  </div>
+  <div class="stat">
+    <div class="slabel">Score</div>
+    <div class="sval c-g" id="sc">0</div>
+  </div>
+  <div class="stat">
+    <div class="slabel">Best Score</div>
+    <div class="sval c-y" id="best">0</div>
+  </div>
+  <div class="stat">
+    <div class="slabel">ε Exploration</div>
+    <div class="sval c-p sm" id="eps">1.0000</div>
+    <div class="barw"><div class="barf p" id="epsbar" style="width:100%"></div></div>
+  </div>
+  <div class="stat">
+    <div class="slabel">Q-States</div>
+    <div class="sval c-b sm" id="qs">0</div>
+  </div>
+  <div class="stat">
+    <div class="slabel">Total Steps</div>
+    <div class="sval sm" id="ts" style="color:var(--text)">0</div>
+  </div>
+  <div class="legend">
+    <div class="ptitle" style="margin-top:4px">Legend</div>
+    <div class="leg-i"><div class="leg-d" style="background:#00ff9d"></div>Snake Head</div>
+    <div class="leg-i"><div class="leg-d" style="background:#007f4e"></div>Snake Body</div>
+    <div class="leg-i"><div class="leg-d" style="background:#ff2d55"></div>Food</div>
+  </div>
+</aside>
+
+<!-- CENTER -->
+<div class="carea">
+  <div class="cframe" id="frame">
+    <canvas id="gc"></canvas>
+    <div class="corner tl"></div><div class="corner tr"></div>
+    <div class="corner bl"></div><div class="corner br"></div>
+  </div>
+  <div class="sbar">
+    <div class="dot idle" id="dot"></div>
+    <span id="stxt">IDLE — PRESS START TO TRAIN</span>
+  </div>
+  <div id="tprog">⚡ FAST TRAINING IN PROGRESS…</div>
+  <canvas id="ch"></canvas>
+</div>
+
+<!-- RIGHT -->
+<aside class="panel b">
+  <div class="ptitle">Controls</div>
+  <div class="btngrp">
+    <button class="btn-g" id="bstart">▶ Start Agent</button>
+    <button class="btn-b" id="bpause" disabled>⏸ Pause</button>
+    <button class="btn-p" id="breset">↺ Full Reset</button>
+    <button class="btn-y" id="btrain">⚡ Train 200 Eps</button>
+  </div>
+  <div class="spwrap">
+    <label>Speed <span id="spval">10 fps</span></label>
+    <input type="range" id="spslider" min="1" max="60" value="10"/>
+  </div>
+  <div class="ptitle">Score Chart</div>
+  <div class="stat">
+    <div class="slabel">Avg (last 20)</div>
+    <div class="sval sm c-g" id="avg">0.00</div>
+  </div>
+  <div class="ptitle" style="margin-top:4px">Event Log</div>
+  <div class="log" id="logbox">
+    <div class="log-e">System ready.</div>
+  </div>
+</aside>
+</main>
+
+<script>
+const CELL = 24, GRID = 20;
+const gc   = document.getElementById('gc');
+const gctx = gc.getContext('2d');
+gc.width   = CELL * GRID;
+gc.height  = CELL * GRID;
+
+const ch   = document.getElementById('ch');
+const cctx = ch.getContext('2d');
+ch.width   = 480; ch.height = 90;
+
+let scores = [], polling = false, pollTimer = null;
+
+// ── draw board ────────────────────────────────────────────────────────────────
+function drawBoard(board) {
+  gctx.fillStyle = '#060d18';
+  gctx.fillRect(0,0,gc.width,gc.height);
+  for (let r=0;r<GRID;r++) for (let c=0;c<GRID;c++) {
+    const x=c*CELL, y=r*CELL;
+    gctx.strokeStyle='#0a1a2a';
+    gctx.strokeRect(x+.5,y+.5,CELL-1,CELL-1);
+    const cell=board[r][c], px=x+1, py=y+1, sz=CELL-2;
+    if (cell==='head') {
+      const g=gctx.createRadialGradient(px+sz/2,py+sz/2,2,px+sz/2,py+sz/2,sz);
+      g.addColorStop(0,'#afffdf'); g.addColorStop(1,'#00ff9d');
+      gctx.fillStyle=g; gctx.shadowColor='#00ff9d'; gctx.shadowBlur=16;
+      gctx.fillRect(px,py,sz,sz); gctx.shadowBlur=0;
+      gctx.fillStyle='#020408';
+      gctx.fillRect(px+sz*.2,py+sz*.25,3,3);
+      gctx.fillRect(px+sz*.55,py+sz*.25,3,3);
+    } else if (cell==='body') {
+      gctx.fillStyle='#007f4e'; gctx.shadowColor='#00ff9d'; gctx.shadowBlur=3;
+      gctx.fillRect(px+1,py+1,sz-2,sz-2); gctx.shadowBlur=0;
+    } else if (cell==='food') {
+      const fx=px+sz/2, fy=py+sz/2, fr=sz/2-1;
+      gctx.beginPath(); gctx.arc(fx,fy,fr,0,Math.PI*2);
+      const g=gctx.createRadialGradient(fx-2,fy-2,1,fx,fy,fr);
+      g.addColorStop(0,'#ff7099'); g.addColorStop(1,'#ff2d55');
+      gctx.fillStyle=g; gctx.shadowColor='#ff2d55'; gctx.shadowBlur=16;
+      gctx.fill(); gctx.shadowBlur=0;
+    }
+  }
+}
+
+// ── draw chart ────────────────────────────────────────────────────────────────
+function drawChart() {
+  const w=ch.width, h=ch.height;
+  cctx.fillStyle='#060d18'; cctx.fillRect(0,0,w,h);
+  const pts=scores.slice(-80);
+  if (pts.length<2) return;
+  const maxS=Math.max(...pts,1), step=w/(pts.length-1);
+  const gr=cctx.createLinearGradient(0,0,0,h);
+  gr.addColorStop(0,'rgba(0,255,157,.22)'); gr.addColorStop(1,'rgba(0,255,157,0)');
+  cctx.beginPath();
+  pts.forEach((s,i)=>{
+    const x=i*step, y=h-(s/maxS)*(h-6)-2;
+    i===0?cctx.moveTo(x,y):cctx.lineTo(x,y);
+  });
+  cctx.lineTo((pts.length-1)*step,h); cctx.lineTo(0,h); cctx.closePath();
+  cctx.fillStyle=gr; cctx.fill();
+  cctx.beginPath();
+  pts.forEach((s,i)=>{
+    const x=i*step, y=h-(s/maxS)*(h-6)-2;
+    i===0?cctx.moveTo(x,y):cctx.lineTo(x,y);
+  });
+  cctx.strokeStyle='#00ff9d'; cctx.lineWidth=1.5;
+  cctx.shadowColor='#00ff9d'; cctx.shadowBlur=6;
+  cctx.stroke(); cctx.shadowBlur=0;
+
+  // avg line
+  const last20 = pts.slice(-20);
+  const avg = last20.reduce((a,b)=>a+b,0)/last20.length;
+  document.getElementById('avg').textContent = avg.toFixed(2);
+  const ay = h-(avg/maxS)*(h-6)-2;
+  cctx.beginPath(); cctx.moveTo(0,ay); cctx.lineTo(w,ay);
+  cctx.strokeStyle='rgba(255,206,0,.4)'; cctx.lineWidth=1; cctx.setLineDash([4,4]);
+  cctx.stroke(); cctx.setLineDash([]);
+}
+
+// ── update stats ──────────────────────────────────────────────────────────────
+function updateStats(d) {
+  document.getElementById('ep').textContent   = d.agent.episode;
+  document.getElementById('sc').textContent   = d.score;
+  document.getElementById('best').textContent = d.agent.best;
+  document.getElementById('qs').textContent   = d.agent.q_states.toLocaleString();
+  document.getElementById('ts').textContent   = d.agent.steps.toLocaleString();
+  const e = d.agent.epsilon;
+  document.getElementById('eps').textContent  = e.toFixed(4);
+  document.getElementById('epsbar').style.width = (e*100)+'%';
+}
+
+// ── log ───────────────────────────────────────────────────────────────────────
+function log(msg, cls='') {
+  const box=document.getElementById('logbox');
+  const d=document.createElement('div');
+  d.className='log-e '+cls; d.textContent=msg; box.appendChild(d);
+  box.scrollTop=box.scrollHeight;
+  if (box.children.length>100) box.removeChild(box.firstChild);
+}
+
+// ── status bar ────────────────────────────────────────────────────────────────
+function setStatus(mode, text) {
+  const dot=document.getElementById('dot');
+  dot.className='dot '+mode;
+  document.getElementById('stxt').textContent=text;
+  const tprog=document.getElementById('tprog');
+  tprog.classList.toggle('show', mode==='fast');
+}
+
+// ── polling loop (pulls state every 80ms) ────────────────────────────────────
+let lastEp=-1, lastBest=0;
+async function poll() {
+  if (!polling) return;
+  try {
+    const r = await fetch('/api/state');
+    const d = await r.json();
+    drawBoard(d.board);
+    updateStats(d);
+
+    // collect score history from server
+    if (d.history && d.history.length) {
+      const newScores = d.history.map(h=>h.score);
+      if (newScores.length !== scores.length) {
+        scores = newScores;
+        drawChart();
+      }
+    }
+
+    if (d.agent.episode !== lastEp && d.agent.episode > 0) {
+      lastEp = d.agent.episode;
+      log(`Ep ${d.agent.episode} → score ${d.score}`, d.score>0?'ok':'');
+    }
+    if (d.agent.best > lastBest) {
+      lastBest = d.agent.best;
+      log(`🏆 New best: ${lastBest}`, 'ok');
+    }
+
+    if (d.mode==='watch')  setStatus('watch','AGENT RUNNING — LEARNING');
+    else if (d.mode==='fast') setStatus('fast','FAST TRAINING…');
+    else { setStatus('idle','PAUSED'); }
+
+    // re-enable/disable buttons
+    document.getElementById('bstart').disabled = d.running && d.mode==='watch';
+    document.getElementById('bpause').disabled = !d.running;
+    document.getElementById('btrain').disabled = d.running;
+
+  } catch(e) { console.error('poll error', e); }
+  pollTimer = setTimeout(poll, 80);
+}
+
+function startPoll() { polling=true; poll(); }
+function stopPoll()  { polling=false; clearTimeout(pollTimer); }
+
+// ── buttons ───────────────────────────────────────────────────────────────────
+document.getElementById('bstart').addEventListener('click', async ()=>{
+  await fetch('/api/start',{method:'POST'});
+  log('Agent started.','ok');
+  startPoll();
+});
+
+document.getElementById('bpause').addEventListener('click', async ()=>{
+  await fetch('/api/pause',{method:'POST'});
+  setStatus('idle','PAUSED');
+  log('Paused.');
+});
+
+document.getElementById('breset').addEventListener('click', async ()=>{
+  stopPoll();
+  await fetch('/api/reset',{method:'POST'});
+  scores=[]; lastEp=-1; lastBest=0;
+  const r=await fetch('/api/state');
+  const d=await r.json();
+  drawBoard(d.board); updateStats(d); drawChart();
+  setStatus('idle','RESET — PRESS START');
+  document.getElementById('bstart').disabled=false;
+  document.getElementById('bpause').disabled=true;
+  document.getElementById('btrain').disabled=false;
+  document.getElementById('avg').textContent='0.00';
+  log('Full reset done.','warn');
+});
+
+document.getElementById('btrain').addEventListener('click', async ()=>{
+  await fetch('/api/train',{method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({episodes:200})});
+  log('Fast training 200 episodes…','warn');
+  setStatus('fast','FAST TRAINING…');
+  if (!polling) startPoll();
+});
+
+document.getElementById('spslider').addEventListener('input', function(){
+  const fps=parseInt(this.value);
+  document.getElementById('spval').textContent=fps+' fps';
+  fetch('/api/speed',{method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({fps})});
+});
+
+// ── init ──────────────────────────────────────────────────────────────────────
+(async ()=>{
+  const r=await fetch('/api/state');
+  const d=await r.json();
+  drawBoard(d.board);
+  updateStats(d);
+  drawChart();
+  log('System ready. Press ▶ Start Agent.');
+  startPoll();
+})();
+</script>
+</body>
+</html>
